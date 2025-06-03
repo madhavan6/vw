@@ -5,7 +5,10 @@
     { "path": "./tsconfig.node.json" }
   ],
   "compilerOptions": {
-    "baseUrl": ".",
+    //"baseUrl": ".",
+     //"baseUrl": "./",
+   "baseUrl": "",
+   // "baseUrl": "/",
     "paths": {
       "@/*": ["./src/*"]
     },
