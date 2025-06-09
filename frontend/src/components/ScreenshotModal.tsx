@@ -63,7 +63,7 @@ export function ScreenshotModal({
         <div className="flex-1 p-4 flex items-center justify-center bg-muted/50">
           <div className="w-full h-full max-w-full max-h-[calc(90vh-120px)] flex items-center justify-center">
             <img 
-              src={`https://images.unsplash.com/${screenshot}`}
+              src={screenshot}
               alt="Activity screenshot"
               className="max-w-full max-h-full object-contain rounded-lg shadow-lg bg-white"
             />

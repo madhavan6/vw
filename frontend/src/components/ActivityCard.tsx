@@ -1,8 +1,9 @@
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { MousePointer, Keyboard } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { workDiaryApi } from './api';
 
 interface ActivityCardProps {
   screenshot: string;
@@ -13,14 +14,31 @@ interface ActivityCardProps {
   onClick: () => void;
 }
 
+interface ActivityCardProps {
+  userID: string;
+  date: string;
+  onClick: () => void;
+}
+
 export function ActivityCard({ 
-  screenshot, 
-  activityLevel, 
-  mouseClicks, 
-  keyboardPresses, 
-  timeRange,
+  userID,
+  date,
   onClick 
 }: ActivityCardProps) {
+  const [activityData, setActivityData] = useState<any>(null);
+
+  useEffect(() => {
+    const fetchActivityData = async () => {
+      try {
+        const data = await workDiaryApi.getWorkDiary(userID, date);
+        setActivityData(data[0]); // Assuming we want the first entry for this card
+      } catch (error) {
+        console.error('Error fetching activity data:', error);
+      }
+    };
+
+    fetchActivityData();
+  }, [userID, date]);
   const getActivityColor = (level: number) => {
     if (level >= 81) return 'bg-green-500';
     if (level >= 61) return 'bg-green-400';
@@ -39,7 +57,7 @@ export function ActivityCard({
     return 0;
   };
 
-  const activeSegments = getActiveSegments(activityLevel);
+  const activeSegments = activityData ? getActiveSegments(activityData.activityLevel) : 0;
 
   return (
     <Card 
@@ -50,14 +68,14 @@ export function ActivityCard({
         <div className="space-y-3">
           <div className="flex justify-between items-center">
             <Badge variant="outline" className="text-xs">
-              {timeRange}
+              {activityData?.screenshotTimeStamp?.split(' ')[0] || 'Loading...'}
             </Badge>
-            <span className="text-sm font-medium">{activityLevel}%</span>
+            <span className="text-sm font-medium">{activityData?.activityLevel || 0}%</span>
           </div>
           
           <div className="relative aspect-video bg-muted rounded-lg overflow-hidden">
             <img 
-              src={`https://images.unsplash.com/${screenshot}`}
+              src={activityData?.imageURL || '/placeholder.png'}
               alt="Activity screenshot"
               className="w-full h-full object-cover"
             />
@@ -70,7 +88,7 @@ export function ActivityCard({
                   key={segment}
                   className={`h-2 flex-1 rounded-sm ${
                     segment <= activeSegments 
-                      ? getActivityColor(activityLevel)
+                      ? getActivityColor(activityData?.activityLevel || 0)
                       : 'bg-gray-200 dark:bg-gray-700'
                   } ${segment <= activeSegments ? 'animate-pulse-activity' : ''}`}
                 />
@@ -80,11 +98,11 @@ export function ActivityCard({
             <div className="flex justify-between text-xs text-muted-foreground">
               <div className="flex items-center gap-1">
                 <MousePointer className="h-3 w-3" />
-                <span>{mouseClicks}</span>
+                <span>{activityData?.mouseJSON?.clicks || 0}</span>
               </div>
               <div className="flex items-center gap-1">
                 <Keyboard className="h-3 w-3" />
-                <span>{keyboardPresses}</span>
+                <span>{activityData?.keyboardJSON?.presses || 0}</span>
               </div>
             </div>
           </div>

@@ -1,19 +1,23 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../db');
-const multer = require('multer');
+
+// Simple test route to verify basic functionality
+router.get('/ping', (req, res) => {
+  res.json({ status: 'ok', message: 'WorkDiary routes are working' });
+});
 const axios = require('axios');
 const fs = require('fs');
 const path = require('path');
 const { v4: uuidv4 } = require('uuid');
-const upload = multer(); // Store files in memory
+const { upload } = require('../server'); // Import global multer instance
 
-// Convert buffer to base64
+// Helper: Convert buffer to base64
 function toBase64(fileBuffer) {
   return fileBuffer.toString('base64');
 }
 
-// Save base64 image to the local file system
+// Helper: Save base64 image to filesystem
 function saveBase64Image(base64String, options = {}) {
   const {
     rootFolder = 'public/images',
@@ -22,49 +26,31 @@ function saveBase64Image(base64String, options = {}) {
     timestamp = new Date().toISOString()
   } = options;
 
-  // Match base64 string format
   const matches = base64String.match(/^data:(image\/[a-zA-Z]+);base64,(.+)$/);
   if (!matches) throw new Error('Invalid base64 string');
 
-  // Extract file extension and base64 data
   const ext = matches[1].split('/')[1];
   const data = matches[2];
   const fileName = `${uuidv4()}.${ext}`;
-
-  // Define folder path based on projectID, taskID, and date
   const date = new Date(timestamp).toISOString().split('T')[0]; // YYYY-MM-DD
-  const folderPath = path.join(
-    rootFolder,
-    `ProjectID_${projectID}`,
-    `TaskID_${taskID}`,
-    date
-  );
-  
-  
 
-  // Create directory if it doesn't exist
-  if (!fs.existsSync(folderPath)) {
-    fs.mkdirSync(folderPath, { recursive: true });
-  }
+  const folderPath = path.join(rootFolder, `ProjectID_${projectID}`, `TaskID_${taskID}`, date);
+  if (!fs.existsSync(folderPath)) fs.mkdirSync(folderPath, { recursive: true });
 
-  // Define file path and write the image data to the file system
   const filePath = path.join(folderPath, fileName);
   fs.writeFileSync(filePath, data, { encoding: 'base64' });
 
-  // Return relative file path for use in the database
   return filePath.replace(/^public/, '').replace(/\\/g, '/');
 }
 
-// Convert image URL to base64 (supports Google Drive)
+// Helper: Fetch image URL (incl. Google Drive) as base64
 async function fetchImageAsBase64(imageURL) {
   try {
     let downloadURL = imageURL;
 
-    // Handle different Google Drive URL formats
     if (imageURL.includes('drive.google.com')) {
       const fileIdMatch = imageURL.match(/(?:id=|\/d\/)([a-zA-Z0-9_-]+)/);
       const fileId = fileIdMatch?.[1];
-
       if (fileId) {
         downloadURL = `https://drive.google.com/uc?export=download&id=${fileId}`;
       } else {
@@ -72,21 +58,20 @@ async function fetchImageAsBase64(imageURL) {
       }
     }
 
-    // Fetch image as base64
     const response = await axios.get(downloadURL, { responseType: 'arraybuffer' });
     return toBase64(response.data);
   } catch (err) {
-    console.error('❌ Image fetch error:', err.message);
+    console.error('Image fetch error:', err.message);
     throw new Error('Failed to fetch image from URL');
   }
 }
 
-// Helper function to format the datetime string into MySQL-compatible format
+// Helper: Format ISO timestamp for MySQL
 function formatDatetimeForMySQL(datetime) {
-  return datetime.replace('T', ' ').split('.')[0]; // Remove 'Z' and milliseconds
+  return datetime.replace('T', ' ').split('.')[0];
 }
 
-// Helper to ensure valid JSON
+// Helper: Parse JSON safely
 function tryParseJson(data) {
   try {
     return typeof data === 'string' ? JSON.stringify(JSON.parse(data)) : JSON.stringify(data);
@@ -95,168 +80,206 @@ function tryParseJson(data) {
   }
 }
 
-// POST route: insert workDiary entry
-router.post('/', upload.fields([
-  { name: 'screenshot', maxCount: 1 },
-  { name: 'thumbnail', maxCount: 1 }
-]), async (req, res) => {
+// POST route to insert workDiary entry
+router.post(
+  '/',
+  upload.fields([
+    { name: 'screenshot', maxCount: 1 },
+    { name: 'thumbnail', maxCount: 1 }
+  ]),
+  async (req, res) => {
+    try {
+      const {
+        projectID,
+        userID,
+        taskID,
+        screenshotTimeStamp,
+        calcTimeStamp,
+        keyboardJSON,
+        mouseJSON,
+        activeJSON,
+        activeFlag,
+        activeMins,
+        deletedFlag,
+        activeMemo,
+        imageURL,
+        thumbNailURL
+      } = req.body;
+
+      if (!projectID || !userID || !taskID || !screenshotTimeStamp || !calcTimeStamp) {
+        return res.status(400).json({ error: 'Missing required fields' });
+      }
+
+      const screenshotTimeStampFormatted = formatDatetimeForMySQL(screenshotTimeStamp);
+      const calcTimeStampFormatted = formatDatetimeForMySQL(calcTimeStamp);
+
+      let imageURLToStore = null;
+      let thumbNailURLToStore = null;
+
+      // Screenshot
+      if (req.files?.['screenshot']) {
+        const base64 = toBase64(req.files['screenshot'][0].buffer);
+        imageURLToStore = saveBase64Image(`data:image/png;base64,${base64}`, {
+          projectID,
+          taskID,
+          timestamp: screenshotTimeStamp
+        });
+      } else if (imageURL?.startsWith('data:image')) {
+        imageURLToStore = saveBase64Image(imageURL, {
+          projectID,
+          taskID,
+          timestamp: screenshotTimeStamp
+        });
+      } else if (imageURL) {
+        const base64 = await fetchImageAsBase64(imageURL);
+        imageURLToStore = saveBase64Image(`data:image/png;base64,${base64}`, {
+          projectID,
+          taskID,
+          timestamp: screenshotTimeStamp
+        });
+      }
+
+      // Thumbnail
+      if (req.files?.['thumbnail']) {
+        const base64 = toBase64(req.files['thumbnail'][0].buffer);
+        thumbNailURLToStore = saveBase64Image(`data:image/png;base64,${base64}`, {
+          projectID,
+          taskID,
+          timestamp: screenshotTimeStamp
+        });
+      } else if (thumbNailURL?.startsWith('data:image')) {
+        thumbNailURLToStore = saveBase64Image(thumbNailURL, {
+          projectID,
+          taskID,
+          timestamp: screenshotTimeStamp
+        });
+      } else if (thumbNailURL) {
+        const base64 = await fetchImageAsBase64(thumbNailURL);
+        thumbNailURLToStore = saveBase64Image(`data:image/png;base64,${base64}`, {
+          projectID,
+          taskID,
+          timestamp: screenshotTimeStamp
+        });
+      }
+
+      const sanitizedData = {
+        projectID,
+        userID,
+        taskID,
+        screenshotTimeStamp: screenshotTimeStampFormatted,
+        calcTimeStamp: calcTimeStampFormatted,
+        keyboardJSON: tryParseJson(keyboardJSON),
+        mouseJSON: tryParseJson(mouseJSON),
+        activeJSON: tryParseJson(activeJSON),
+        activeFlag: activeFlag || null,
+        activeMins: activeMins || null,
+        deletedFlag: deletedFlag !== undefined ? deletedFlag : 0,
+        activeMemo: activeMemo || null,
+        imageURL: imageURLToStore,
+        thumbNailURL: thumbNailURLToStore
+      };
+
+      const [result] = await db.execute(
+        `INSERT INTO workDiary 
+        (projectID, userID, taskID, screenshotTimeStamp, calcTimeStamp, keyboardJSON, mouseJSON, activeJSON, activeFlag, activeMins, deletedFlag, activeMemo, imageURL, thumbNailURL)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        Object.values(sanitizedData)
+      );
+
+      res.status(201).json({ message: 'Work diary entry created', id: result.insertId });
+    } catch (err) {
+      console.error('WorkDiary insert error:', err);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  }
+);
+
+// Test endpoint to verify connection
+router.get('/test', (req, res) => {
+  res.json({
+    status: 'success',
+    message: 'Backend is working',
+    timestamp: new Date().toISOString()
+  });
+});
+
+// Test endpoint to verify image URL
+router.get('/test-image-url', async (req, res) => {
   try {
-    const {
-      projectID,
-      userID,
-      taskID,
-      screenshotTimeStamp,
-      calcTimeStamp,
-      keyboardJSON,
-      mouseJSON,
-      activeJSON,
-      activeFlag,
-      activeMins,
-      deletedFlag,
-      activeMemo,
-      imageURL,  // base64 string for image
-      thumbNailURL // base64 string for thumbnail
-    } = req.body;
-
-    // Check if required fields are provided
-    if (!projectID || !userID || !taskID || !screenshotTimeStamp || !calcTimeStamp) {
-      return res.status(400).json({ error: 'Missing required fields: projectID, userID, taskID, screenshotTimeStamp, or calcTimeStamp' });
-    }
-
-    // Format timestamps to MySQL-compatible format
-    const screenshotTimeStampFormatted = formatDatetimeForMySQL(screenshotTimeStamp);
-    const calcTimeStampFormatted = formatDatetimeForMySQL(calcTimeStamp);
-
-    let imageURLToStore = null;
-    let thumbNailURLToStore = null;
-
-    // Screenshot base64 or file
-    if (req.files && req.files['screenshot']) {
-      const base64 = toBase64(req.files['screenshot'][0].buffer);
-      console.log("Screenshot Base64 Data: ", base64); // Log the screenshot base64 data
-      imageURLToStore = saveBase64Image(`data:image/png;base64,${base64}`, {
-        projectID,
-        taskID,
-        timestamp: screenshotTimeStamp
-      });
-    } else if (imageURL && imageURL.startsWith('data:image')) {
-      const base64 = imageURL.replace(/^data:image\/[a-zA-Z]+;base64,/, '');
-      console.log("Screenshot Base64 URL Data: ", base64); // Log the base64 URL data
-      imageURLToStore = saveBase64Image(`data:image/png;base64,${base64}`, {
-        projectID,
-        taskID,
-        timestamp: screenshotTimeStamp
-      });
-    } else if (imageURL) {
-      const base64 = await fetchImageAsBase64(imageURL);
-      console.log("Screenshot Base64 Fetched Data: ", base64); // Log the fetched base64 data
-      imageURLToStore = saveBase64Image(`data:image/png;base64,${base64}`, {
-        projectID,
-        taskID,
-        timestamp: screenshotTimeStamp
-      });
-    }
-
-    // Thumbnail base64 or file
-    if (req.files && req.files['thumbnail']) {
-      const base64 = toBase64(req.files['thumbnail'][0].buffer);
-      console.log("Thumbnail Base64 Data: ", base64); // Log the thumbnail base64 data
-      thumbNailURLToStore = saveBase64Image(`data:image/png;base64,${base64}`, {
-        projectID,
-        taskID,
-        timestamp: screenshotTimeStamp
-      });
-    } else if (thumbNailURL && thumbNailURL.startsWith('data:image')) {
-      const base64 = thumbNailURL.replace(/^data:image\/[a-zA-Z]+;base64,/, '');
-      console.log("Thumbnail Base64 URL Data: ", base64); // Log the base64 URL data
-      thumbNailURLToStore = saveBase64Image(`data:image/png;base64,${base64}`, {
-        projectID,
-        taskID,
-        timestamp: screenshotTimeStamp
-      });
-    } else if (thumbNailURL) {
-      const base64 = await fetchImageAsBase64(thumbNailURL);
-      console.log("Thumbnail Base64 Fetched Data: ", base64); // Log the fetched base64 data
-      thumbNailURLToStore = saveBase64Image(`data:image/png;base64,${base64}`, {
-        projectID,
-        taskID,
-        timestamp: screenshotTimeStamp
-      });
-    }
-
-    // Sanitize undefined parameters by replacing them with null
-    const sanitizedData = {
-      projectID: projectID || null,
-      userID: userID || null,
-      taskID: taskID || null,
-      screenshotTimeStamp: screenshotTimeStampFormatted,  // Use the formatted timestamp
-      calcTimeStamp: calcTimeStampFormatted,             // Use the formatted timestamp
-      keyboardJSON: tryParseJson(keyboardJSON) || null,
-      mouseJSON: tryParseJson(mouseJSON) || null,
-      activeJSON: tryParseJson(activeJSON) || null,
-      activeFlag: activeFlag || null,
-      activeMins: activeMins || null,
-      deletedFlag: deletedFlag !== undefined ? deletedFlag : 0, // Default to 0 if not provided
-      activeMemo: activeMemo || null,
-      imageURL: imageURLToStore || null,
-      thumbNailURL: thumbNailURLToStore || null
-    };
-
-    // Log sanitized data for debugging
-    console.log('Sanitized Data:', sanitizedData);
-
-    // Store in database
-    const [result] = await db.execute(
-      `INSERT INTO workDiary
-        (projectID, userID, taskID, screenshotTimeStamp, calcTimeStamp, keyboardJSON, mouseJSON, activeJSON,
-         activeFlag, activeMins, deletedFlag, activeMemo, imageURL, thumbNailURL)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [
-        sanitizedData.projectID,
-        sanitizedData.userID,
-        sanitizedData.taskID,
-        sanitizedData.screenshotTimeStamp,
-        sanitizedData.calcTimeStamp,
-        sanitizedData.keyboardJSON,
-        sanitizedData.mouseJSON,
-        sanitizedData.activeJSON,
-        sanitizedData.activeFlag,
-        sanitizedData.activeMins,
-        sanitizedData.deletedFlag,
-        sanitizedData.activeMemo,
-        sanitizedData.imageURL,
-        sanitizedData.thumbNailURL
-      ]
+    const [rows] = await db.execute(
+      'SELECT id, imageURL, thumbNailURL FROM workDiary WHERE deletedFlag = 0 LIMIT 1'
     );
-
-    res.json({ message: 'Data inserted with image URLs', id: result.insertId });
+    if (!rows || rows.length === 0) {
+      return res.json({ error: 'No screenshots found' });
+    }
+    
+    const screenshot = rows[0];
+    res.json({
+      id: screenshot.id,
+      imageURL: screenshot.imageURL,
+      thumbNailURL: screenshot.thumbNailURL,
+      formattedImageURL: screenshot.imageURL?.startsWith('http') 
+        ? screenshot.imageURL 
+        : `http://localhost:5000${screenshot.imageURL}`,
+      formattedThumbNailURL: screenshot.thumbNailURL?.startsWith('http') 
+        ? screenshot.thumbNailURL 
+        : `http://localhost:5000${screenshot.thumbNailURL}`
+    });
   } catch (err) {
-    console.error('❌ Insert Error:', err);
-    res.status(500).json({ error: 'Database insert failed', details: err.message });
+    console.error('Test image URL error:', err);
+    res.status(500).json({ error: 'Failed to fetch image URL' });
   }
 });
 
-// GET route: retrieve work logs by user and date
-router.get('/', async (req, res) => {
-  const { userID, date } = req.query;
-
-  if (!userID || !date) {
-    return res.status(400).json({ error: 'Missing userID or date' });
-  }
-
+// GET all screenshots
+router.get('/all', async (req, res) => {
   try {
+    console.log('Fetching screenshots from database...');
     const [rows] = await db.execute(
-      `SELECT * FROM workDiary
-       WHERE userID = ? AND screenshotTimeStamp BETWEEN ? AND ?
-       ORDER BY screenshotTimeStamp ASC`,
-      [`${userID}`, `${date} 00:00:00`, `${date} 23:59:59`]
+      'SELECT id, screenshotTimeStamp as timestamp, imageURL, thumbNailURL FROM workDiary WHERE deletedFlag = 0 ORDER BY screenshotTimeStamp DESC'
     );
+    console.log('Found screenshots:', rows.length);
+    
+    // Ensure we have valid data
+    if (!rows || !Array.isArray(rows)) {
+      throw new Error('Invalid data format from database');
+    }
 
-    res.json(rows);
+    // Transform the data to ensure it's properly formatted
+    const screenshots = rows.map(row => {
+      // Ensure URLs are properly formatted
+      const imageURL = row.imageURL?.startsWith('http') 
+        ? row.imageURL 
+        : `http://localhost:5000${row.imageURL}`;
+      const thumbNailURL = row.thumbNailURL?.startsWith('http') 
+        ? row.thumbNailURL 
+        : `http://localhost:5000${row.thumbNailURL}`;
+      
+      return {
+        id: row.id,
+        timestamp: row.timestamp,
+        imageURL,
+        thumbNailURL
+      };
+    });
+
+    // For debugging: send as plain text
+    res.setHeader('Content-Type', 'text/plain');
+    res.status(200).send(JSON.stringify(screenshots, null, 2));
   } catch (err) {
-    console.error('❌ SQL Error:', err);
-    res.status(500).json({ error: 'Database fetch failed', details: err.message });
+    console.error('Detailed error:', err);
+    console.error('Error message:', err.message);
+    console.error('Stack trace:', err.stack);
+    
+    // For debugging: send as plain text
+    res.setHeader('Content-Type', 'text/plain');
+    res.status(500).send(`Error: ${err.message}\nStack: ${err.stack}`);
   }
+});
+
+// Optional test route
+router.get('/test', (req, res) => {
+  res.json({ status: 'ok', message: 'API is working' });
 });
 
 module.exports = router;
