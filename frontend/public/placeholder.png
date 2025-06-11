@@ -1,0 +1,29 @@
+/* Add a simple placeholder image */
+const canvas = document.createElement('canvas');
+canvas.width = 200;
+canvas.height = 150;
+const ctx = canvas.getContext('2d');
+
+// Draw a simple placeholder
+ctx.fillStyle = '#f0f0f0';
+ctx.fillRect(0, 0, canvas.width, canvas.height);
+ctx.fillStyle = '#666';
+ctx.font = '20px Arial';
+ctx.fillText('No Image', 60, 75);
+
+// Save the canvas as PNG
+const dataURL = canvas.toDataURL('image/png');
+const blob = dataURLToBlob(dataURL);
+const file = new File([blob], 'placeholder.png', { type: 'image/png' });
+
+// Function to convert dataURL to Blob
+function dataURLToBlob(dataURL) {
+  const arr = dataURL.split(','),
+        mime = arr[0].match(/:(.*?);/)[1],
+        bstr = atob(arr[1]),
+        n = bstr.length,
+        u8arr = new Uint8Array(n);
+  while(n--)
+    u8arr[n] = bstr.charCodeAt(n);
+  return new Blob([u8arr], {type:mime});
+}
