@@ -374,6 +374,27 @@ router.post(
     }
   }
 );
+// Example Express route
+router.get('/bydate/:date', async (req, res) => {
+  const { date } = req.params;
+
+  const start = `${date} 00:00:00`;
+  const end = `${date} 23:59:59`;
+
+  try {
+    const [rows] = await db.execute(`
+      SELECT * FROM workDiary
+      WHERE screenshotTimeStamp BETWEEN ? AND ?
+      ORDER BY screenshotTimeStamp ASC
+    `, [start, end]);
+
+    res.json(rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).send('Error fetching screenshots');
+  }
+});
+
 
 // Test endpoint to verify connection
 router.get("/test", (req, res) => {
