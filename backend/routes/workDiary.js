@@ -6,25 +6,32 @@ const db = require("../db");
 router.get('/all', async (req, res) => {
   try {
     const [rows] = await db.query(`
-      SELECT 
-        id,
-        projectID,
-        userID,
-        taskID,
-        screenshotTimeStamp,
-        calcTimeStamp,
-        keyboardJSON,
-        mouseJSON,
-        activeJSON,
-        activeFlag,
-        activeMins,
-        deletedFlag,
-        activeMemo,
-        imageURL,
-        thumbNailURL,
-        createdAt,
-        modifiedAt
-      FROM workDiary
+   SELECT 
+  wd.id,
+  wd.projectID,
+  wd.userID,
+  wd.taskID,
+  wd.screenshotTimeStamp,
+  wd.calcTimeStamp,
+  wd.keyboardJSON,
+  wd.mouseJSON,
+  wd.activeJSON,
+  wd.activeFlag,
+  wd.activeMins,
+  wd.deletedFlag,
+  wd.activeMemo,
+  wd.imageURL,
+  wd.thumbNailURL,
+  wd.createdAt,
+  wd.modifiedAt,
+  u.name AS userName,
+  p.name AS projectName,
+  t.name AS taskName
+FROM workDiary wd
+JOIN users u ON wd.userID = u.id
+JOIN projects p ON wd.projectID = p.id
+JOIN tasks t ON wd.taskID = t.id
+
     `);
 
     res.json(rows); // Send the full result
@@ -436,9 +443,20 @@ router.get("/test-image-url", async (req, res) => {
 router.get("/all", async (req, res) => {
   try {
     console.log("Fetching all data from workDiary table...");
-    const [rows] = await db.execute(
-      "SELECT * FROM workDiary WHERE deletedFlag = 0 ORDER BY screenshotTimeStamp DESC"
-    );
+   const [rows] = await db.execute(`
+  SELECT 
+    wd.*,
+    u.name AS userName,
+    p.name AS projectName,
+    t.name AS taskName
+  FROM workDiary wd
+  JOIN users u ON wd.userID = u.id
+  JOIN projects p ON wd.projectID = p.id
+  JOIN tasks t ON wd.taskID = t.id
+  WHERE wd.deletedFlag = 0
+  ORDER BY wd.screenshotTimeStamp DESC
+`);
+
     
     console.log("Raw database rows:", rows);
 
@@ -476,29 +494,35 @@ router.get("/all", async (req, res) => {
         null;
       
       return {
-        id: row.id,
-        projectID: row.projectID,
-        userID: row.userID,
-        taskID: row.taskID,
-        screenshotTimeStamp: row.screenshotTimeStamp,
-        calcTimeStamp: row.calcTimeStamp,
-        timestamp: row.screenshotTimeStamp,
-        screenshot,
-        thumbnail,
-        activeMemo: row.activeMemo || "",
-        activeFlag: row.activeFlag || false,
-        activeMins: row.activeMins || 0,
-        activeJSON,
-        mouseJSON,
-        keyboardJSON,
-        mouseClicks: mouseJSON.clicks || 0,
-        keyboardClicks: keyboardJSON.clicks || 0,
-        deletedFlag: row.deletedFlag,
-        imageURL: row.imageURL,
-        thumbNailURL: row.thumbNailURL,
-        createdAt: row.createdAt,
-        modifiedAt: row.modifiedAt
-      };
+  id: row.id,
+  projectID: row.projectID,
+  userID: row.userID,
+  taskID: row.taskID,
+  screenshotTimeStamp: row.screenshotTimeStamp,
+  calcTimeStamp: row.calcTimeStamp,
+  timestamp: row.screenshotTimeStamp,
+  screenshot,
+  thumbnail,
+  activeMemo: row.activeMemo || "",
+  activeFlag: row.activeFlag || false,
+  activeMins: row.activeMins || 0,
+  activeJSON,
+  mouseJSON,
+  keyboardJSON,
+  mouseClicks: mouseJSON.clicks || 0,
+  keyboardClicks: keyboardJSON.clicks || 0,
+  deletedFlag: row.deletedFlag,
+  imageURL: row.imageURL,
+  thumbNailURL: row.thumbNailURL,
+  createdAt: row.createdAt,
+  modifiedAt: row.modifiedAt,
+
+  // ✅ Add these:
+  userName: row.userName || 'N/A',
+  projectName: row.projectName || 'N/A',
+  taskName: row.taskName || 'N/A'
+};
+
     });
 
     console.log("Formatted data sample:", {

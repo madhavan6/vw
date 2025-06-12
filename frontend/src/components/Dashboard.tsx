@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import Select from 'react-select';
 
 interface Employee {
   id: string;
@@ -27,7 +28,13 @@ interface ScreenshotData {
   keyboardJSON: {
     clicks: number;
   };
+
+  // ✅ Add these optional fields
+  userName?: string;
+  projectName?: string;
+  taskName?: string;
 }
+
 
 interface DashboardProps {
   currentUser: {
@@ -45,6 +52,10 @@ export function Dashboard({ currentUser }: DashboardProps) {
   const [activityData, setActivityData] = useState({ mouseClicks: 0, keyboardPresses: 0 });
   const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [groupedByHour, setGroupedByHour] = useState<Record<string, ScreenshotData[]>>({});
+  type SelectOption = { label: string; value: string };
+
+  const [selectedUser, setSelectedUser] = useState<SelectOption | null>(null);
+  const [userOptions, setUserOptions] = useState<SelectOption[]>([]);
 
   useEffect(() => {
     const handleMouseClick = () => {
@@ -70,74 +81,91 @@ export function Dashboard({ currentUser }: DashboardProps) {
   };
 
   useEffect(() => {
-    async function fetchScreenshots() {
-      try {
-        setIsLoading(true);
-        setError(null);
+  async function fetchScreenshots() {
+    try {
+      setIsLoading(true);
+      setError(null);
 
-        const response = await fetch('http://localhost:5000/api/workdiary/all', {
-          method: 'GET',
-          headers: {
-            Accept: 'application/json',
-            'Content-Type': 'application/json',
-          },
-        });
+      const response = await fetch('http://localhost:5000/api/workdiary/all', {
+        method: 'GET',
+        headers: {
+          Accept: 'application/json',
+          'Content-Type': 'application/json',
+        },
+      });
 
-        const text = await response.text();
+      const text = await response.text();
 
-        if (!response.ok) {
-          throw new Error(text || 'Failed to fetch screenshots');
-        }
-
-        const data = JSON.parse(text);
-
-        if (!data || !Array.isArray(data)) {
-          throw new Error('Invalid screenshots data');
-        }
-
-        const screenshots = data.map((row: any) => {
-          const raw = row.timestamp ?? row.screenshotTimeStamp ?? row.calcTimeStamp;
-          const timestamp = raw && typeof raw === "string" ? raw : new Date().toISOString();
-
-          const keyboardData = row.keyboardJSON || { clicks: 0 };
-          const mouseData = row.mouseJSON || { clicks: 0 };
-          const activeData = row.activeJSON || {};
-
-          return {
-            id: row.id,
-            projectID: row.projectID,
-            userID: row.userID,
-            taskID: row.taskID,
-            timestamp,
-            screenshot: row.imageURL,
-            thumbnail: row.thumbNailURL,
-            mouseJSON: mouseData,
-            keyboardJSON: keyboardData,
-            activeMemo: row.activeMemo || '',
-            activeFlag: row.activeFlag,
-            activeMins: row.activeMins,
-            activeJSON: activeData
-          };
-        });
-
-        setScreenshots(screenshots);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to fetch screenshots');
-        setScreenshots([]);
-      } finally {
-        setIsLoading(false);
+      if (!response.ok) {
+        throw new Error(text || 'Failed to fetch screenshots');
       }
-    }
 
-    fetchScreenshots();
-  }, []);
+      const data = JSON.parse(text);
+
+      if (!data || !Array.isArray(data)) {
+        throw new Error('Invalid screenshots data');
+      }
+
+      const screenshots = data.map((row: any) => {
+        const raw = row.timestamp ?? row.screenshotTimeStamp ?? row.calcTimeStamp;
+        const timestamp = raw && typeof raw === "string" ? raw : new Date().toISOString();
+
+        const keyboardData = row.keyboardJSON || { clicks: 0 };
+        const mouseData = row.mouseJSON || { clicks: 0 };
+        const activeData = row.activeJSON || {};
+
+        return {
+          id: row.id,
+          projectID: row.projectID,
+          userID: row.userID,
+          taskID: row.taskID,
+          timestamp,
+          screenshot: row.imageURL,
+          thumbnail: row.thumbNailURL,
+          mouseJSON: mouseData,
+          keyboardJSON: keyboardData,
+          activeMemo: row.activeMemo || '',
+          activeFlag: row.activeFlag,
+          activeMins: row.activeMins,
+          activeJSON: activeData,
+          userName: row.userName || 'N/A',
+          projectName: row.projectName || 'N/A',
+          taskName: row.taskName || 'N/A',
+        };
+      });
+
+      setScreenshots(screenshots);
+
+      // ✅ STEP 2: Generate user options for dropdown
+      const uniqueUsers = Array.from(
+        new Set(screenshots.map((s) => s.userName).filter(Boolean))
+      );
+
+      setUserOptions(
+        uniqueUsers.map((name) => ({ label: name!, value: name! }))
+      );
+
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to fetch screenshots');
+      setScreenshots([]);
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
+  fetchScreenshots();
+}, []);
 
   useEffect(() => {
     // Filter screenshots for selected date
-    const filtered = screenshots.filter((screenshot) => {
-      const screenshotDate = new Date(screenshot.timestamp).toISOString().split('T')[0];
-      return screenshotDate === selectedDate;
-    });
+const filtered = screenshots.filter((screenshot) => {
+  const screenshotDate = new Date(screenshot.timestamp).toISOString().split('T')[0];
+  const dateMatch = screenshotDate === selectedDate;
+  const userMatch = selectedUser ? screenshot.userName === selectedUser.value : true;
+  return dateMatch && userMatch;
+});
+
+
 
     // Group by hour range
     const grouped: Record<string, ScreenshotData[]> = {};
@@ -150,7 +178,11 @@ export function Dashboard({ currentUser }: DashboardProps) {
     });
 
     setGroupedByHour(grouped);
-  }, [screenshots, selectedDate]);
+ }, [screenshots, selectedDate, selectedUser]); // ✅ now reacts to user change too
+useEffect(() => {
+  setSelected(null); // Close the modal if it's open
+}, [selectedDate, selectedUser]);
+
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -159,15 +191,62 @@ export function Dashboard({ currentUser }: DashboardProps) {
           <div>
             <h1 className="text-3xl font-bold">Employee Screenshots</h1>
             <p className="text-muted-foreground">View screenshots organized by date and time</p>
-            <div className="mt-4">
-              <label className="font-medium mr-2">Select Date:</label>
-              <input
-                type="date"
-                value={selectedDate}
-                onChange={(e) => setSelectedDate(e.target.value)}
-                className="border px-2 py-1 rounded dark:bg-gray-800 dark:text-white dark:border-gray-600"
-              />
-            </div>
+         <div className="mt-4 space-y-2">
+<div className="flex flex-col sm:flex-row sm:items-center gap-2">
+  <label className="font-medium text-sm dark:text-white">User Name:</label>
+  <div className="w-[180px]">
+    <Select
+      options={userOptions}
+      value={selectedUser}
+      onChange={setSelectedUser}
+      isClearable
+      placeholder="Select User"
+      className="text-sm"
+      styles={{
+        control: (base, state) => ({
+          ...base,
+          backgroundColor: '#1a202c',
+          borderColor: state.isFocused ? '#4a5568' : '#2d3748',
+          color: '#fff',
+        }),
+        input: (base) => ({
+          ...base,
+          color: '#fff',
+        }),
+        placeholder: (base) => ({
+          ...base,
+          color: '#a0aec0',
+        }),
+        singleValue: (base) => ({
+          ...base,
+          color: '#fff',
+        }),
+        menu: (base) => ({
+          ...base,
+          backgroundColor: '#1a202c',
+          color: '#fff',
+        }),
+        option: (base, { isFocused }) => ({
+          ...base,
+          backgroundColor: isFocused ? '#2d3748' : '#1a202c',
+          color: '#fff',
+        }),
+      }}
+    />
+  </div>
+</div>
+
+
+
+  <label className="font-medium mr-2">Select Date:</label>
+  <input
+    type="date"
+    value={selectedDate}
+    onChange={(e) => setSelectedDate(e.target.value)}
+    className="border px-2 py-1 rounded dark:bg-gray-800 dark:text-white dark:border-gray-600"
+  />
+</div>
+
           </div>
         </div>
       </div>
@@ -215,7 +294,6 @@ export function Dashboard({ currentUser }: DashboardProps) {
           ))}
         </div>
       )}
-
       {/* Modal */}
       {selected && (
         <div
@@ -232,8 +310,26 @@ export function Dashboard({ currentUser }: DashboardProps) {
               style={{ width: '100%', maxWidth: '500px', borderRadius: '8px' }}
             />
             <div className="flex-1">
-              <h3 className="text-xl font-semibold mb-2">Activity Details</h3>
-              <div className="space-y-4">
+              <h3 className="text-xl font-semibold mb-4">Activity Details</h3>
+
+              {/* User / Project / Task Names */}
+              <div className="space-y-3">
+                <div className="flex justify-between">
+                  <span>User Name:</span>
+                  <span>{selected.userName || 'N/A'}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Project Name:</span>
+                  <span>{selected.projectName || 'N/A'}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Task Name:</span>
+                  <span>{selected.taskName || 'N/A'}</span>
+                </div>
+              </div>
+
+              {/* Other activity data */}
+              <div className="space-y-4 mt-6">
                 <div className="flex justify-between">
                   <span>Mouse Clicks:</span>
                   <span>{selected.mouseJSON?.clicks ?? 0}</span>
@@ -247,10 +343,6 @@ export function Dashboard({ currentUser }: DashboardProps) {
                   <span>{selected.activeMins ?? 0}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span>Activity Flag:</span>
-                  <span>{selected.activeFlag ? 'Active' : 'Inactive'}</span>
-                </div>
-                <div className="flex justify-between">
                   <span>Active Memo:</span>
                   <span>{selected.activeMemo || 'N/A'}</span>
                 </div>
@@ -259,12 +351,27 @@ export function Dashboard({ currentUser }: DashboardProps) {
                   <span>{new Date(selected.timestamp).toLocaleString()}</span>
                 </div>
               </div>
+
+              {/* Close button */}
+              <div className="mt-6 flex justify-center">
+                <button
+                  onClick={() => setSelected(null)}
+                  className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700"
+                >
+                  Close
+                </button>
+              </div>
             </div>
           </div>
         </div>
       )}
-    </div>
-  );
+
+    </div> 
+);
 }
 
 export default Dashboard;
+
+
+
+
