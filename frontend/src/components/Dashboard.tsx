@@ -52,10 +52,13 @@ export function Dashboard({ currentUser }: DashboardProps) {
   const [activityData, setActivityData] = useState({ mouseClicks: 0, keyboardPresses: 0 });
   const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [groupedByHour, setGroupedByHour] = useState<Record<string, ScreenshotData[]>>({});
+  
   type SelectOption = { label: string; value: string };
 
   const [selectedUser, setSelectedUser] = useState<SelectOption | null>(null);
   const [userOptions, setUserOptions] = useState<SelectOption[]>([]);
+  const [selectedProject, setSelectedProject] = useState<SelectOption | null>(null);
+  const [projectOptions, setProjectOptions] = useState<SelectOption[]>([]);
 
   useEffect(() => {
     const handleMouseClick = () => {
@@ -144,7 +147,10 @@ export function Dashboard({ currentUser }: DashboardProps) {
       setUserOptions(
         uniqueUsers.map((name) => ({ label: name!, value: name! }))
       );
-
+       
+      // ✅ STEP 3: Generate project options for dropdown
+      const uniqueProjects = Array.from(new Set(screenshots.map(s => s.projectName)));
+setProjectOptions(uniqueProjects.map(p => ({ label: p, value: p })));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch screenshots');
       setScreenshots([]);
@@ -158,16 +164,17 @@ export function Dashboard({ currentUser }: DashboardProps) {
 
   useEffect(() => {
     // Filter screenshots for selected date
-const filtered = screenshots.filter((screenshot) => {
-  const screenshotDate = new Date(screenshot.timestamp).toISOString().split('T')[0];
-  const dateMatch = screenshotDate === selectedDate;
-  const userMatch = selectedUser ? screenshot.userName === selectedUser.value : true;
-  return dateMatch && userMatch;
-});
-
-
+    const filtered = screenshots.filter((screenshot) => {
+      const screenshotDate = new Date(screenshot.timestamp).toISOString().split('T')[0];
+      const dateMatch = screenshotDate === selectedDate;
+      const userMatch = selectedUser ? screenshot.userName === selectedUser.value : true;
+      const projectMatch = selectedProject ? screenshot.projectName === selectedProject.value : true;
+      return dateMatch && userMatch && projectMatch;
+    });
+    
 
     // Group by hour range
+ 
     const grouped: Record<string, ScreenshotData[]> = {};
 
     filtered.forEach((entry) => {
@@ -176,9 +183,9 @@ const filtered = screenshots.filter((screenshot) => {
       if (!grouped[label]) grouped[label] = [];
       grouped[label].push(entry);
     });
-
+  
     setGroupedByHour(grouped);
- }, [screenshots, selectedDate, selectedUser]); // ✅ now reacts to user change too
+  }, [screenshots, selectedDate, selectedUser, selectedProject]);// ✅ now reacts to user change too
 useEffect(() => {
   setSelected(null); // Close the modal if it's open
 }, [selectedDate, selectedUser]);
@@ -191,61 +198,76 @@ useEffect(() => {
           <div>
             <h1 className="text-3xl font-bold">Employee Screenshots</h1>
             <p className="text-muted-foreground">View screenshots organized by date and time</p>
-         <div className="mt-4 space-y-2">
-<div className="flex flex-col sm:flex-row sm:items-center gap-2">
-  <label className="font-medium text-sm dark:text-white">User Name:</label>
-  <div className="w-[180px]">
-    <Select
-      options={userOptions}
-      value={selectedUser}
-      onChange={setSelectedUser}
-      isClearable
-      placeholder="Select User"
-      className="text-sm"
-      styles={{
-        control: (base, state) => ({
-          ...base,
-          backgroundColor: '#1a202c',
-          borderColor: state.isFocused ? '#4a5568' : '#2d3748',
-          color: '#fff',
-        }),
-        input: (base) => ({
-          ...base,
-          color: '#fff',
-        }),
-        placeholder: (base) => ({
-          ...base,
-          color: '#a0aec0',
-        }),
-        singleValue: (base) => ({
-          ...base,
-          color: '#fff',
-        }),
-        menu: (base) => ({
-          ...base,
-          backgroundColor: '#1a202c',
-          color: '#fff',
-        }),
-        option: (base, { isFocused }) => ({
-          ...base,
-          backgroundColor: isFocused ? '#2d3748' : '#1a202c',
-          color: '#fff',
-        }),
-      }}
+            <div className="mt-4 space-y-2">
+  {/* User Name and Project in same row */}
+  <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+    {/* User Name */}
+    <div className="flex items-center gap-2">
+      <label className="font-medium text-sm dark:text-white">User Name:</label>
+      <div className="w-[200px]">
+        <Select
+          options={userOptions}
+          value={selectedUser}
+          onChange={setSelectedUser}
+          isClearable
+          placeholder="Select User"
+          className="text-sm"
+          styles={{
+            control: (base, state) => ({
+              ...base,
+              height: '36px',
+              backgroundColor: '#1a202c',
+              borderColor: state.isFocused ? '#4a5568' : '#2d3748',
+              color: '#fff',
+              boxShadow: 'none',
+            }),
+            input: (base) => ({ ...base, color: '#fff' }),
+            placeholder: (base) => ({ ...base, color: '#a0aec0' }),
+            singleValue: (base) => ({ ...base, color: '#fff' }),
+            menu: (base) => ({ ...base, backgroundColor: '#1a202c', color: '#fff' }),
+            option: (base, { isFocused }) => ({
+              ...base,
+              backgroundColor: isFocused ? '#2d3748' : '#1a202c',
+              color: '#fff',
+            }),
+          }}
+        />
+      </div>
+    </div>
+
+    {/* Project Name */}
+    <div className="flex items-center gap-2">
+      <label className="font-medium text-sm dark:text-white">Project Name:</label>
+      <select
+        value={selectedProject?.value || ''}
+        onChange={(e) => {
+          const value = e.target.value;
+          const selected = projectOptions.find(opt => opt.value === value) || null;
+          setSelectedProject(selected);
+        }}
+        className="border px-2 py-[6px] rounded dark:bg-gray-800 dark:text-white dark:border-gray-600 w-[200px] h-[36px]"
+      >
+        <option value="">All Projects</option>
+        {projectOptions.map((opt) => (
+          <option key={opt.value} value={opt.value}>{opt.label}</option>
+        ))}
+      </select>
+    </div>
+  </div>
+
+  {/* Date Picker below */}
+  <div className="mt-2">
+    <label className="font-medium text-sm dark:text-white mr-2">Select Date:</label>
+    <input
+      type="date"
+      value={selectedDate}
+      onChange={(e) => setSelectedDate(e.target.value)}
+      className="border px-2 py-1 rounded dark:bg-gray-800 dark:text-white dark:border-gray-600"
     />
   </div>
 </div>
 
 
-
-  <label className="font-medium mr-2">Select Date:</label>
-  <input
-    type="date"
-    value={selectedDate}
-    onChange={(e) => setSelectedDate(e.target.value)}
-    className="border px-2 py-1 rounded dark:bg-gray-800 dark:text-white dark:border-gray-600"
-  />
-</div>
 
           </div>
         </div>
@@ -371,7 +393,3 @@ useEffect(() => {
 }
 
 export default Dashboard;
-
-
-
-
