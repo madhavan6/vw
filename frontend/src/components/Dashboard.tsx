@@ -89,13 +89,14 @@ export function Dashboard({ currentUser }: DashboardProps) {
       setIsLoading(true);
       setError(null);
 
-      const response = await fetch('https://vw.aisrv.in/node_backend/api/workdiary/all', {
-        method: 'GET',
-        headers: {
-          Accept: 'application/json',
-          'Content-Type': 'application/json',
-        },
-      });
+     const response = await fetch('https://vw.aisrv.in/node_backend/getProjectsV4', {
+  method: 'GET',
+  headers: {
+    Accept: 'application/json',
+    'Content-Type': 'application/json',
+  },
+});
+
 
       const text = await response.text();
 
@@ -116,27 +117,25 @@ export function Dashboard({ currentUser }: DashboardProps) {
         const keyboardData = row.keyboardJSON || { clicks: 0 };
         const mouseData = row.mouseJSON || { clicks: 0 };
         const activeData = row.activeJSON || {};
-
-        return {
-          id: row.id,
-          projectID: row.projectID,
-          userID: row.userID,
-          taskID: row.taskID,
-          timestamp,
-          screenshot: row.imageURL,
-          thumbnail: row.thumbNailURL,
-          mouseJSON: mouseData,
-          keyboardJSON: keyboardData,
-          activeMemo: row.activeMemo || '',
-          activeFlag: row.activeFlag,
-          activeMins: row.activeMins,
-          activeJSON: activeData,
-          userName: row.userName || 'N/A',
-          projectName: row.projectName || 'N/A',
-          taskName: row.taskName || 'N/A',
-        };
-      });
-
+  return {
+    id: row.id,
+    projectID: row.projectID,
+    userID: row.userID,
+    taskID: row.taskID,
+    timestamp: row.screenshotTimeStamp ?? new Date().toISOString(),
+    screenshot: row.imageURL, // already full URL
+    thumbnail: row.thumbNailURL, // already full URL
+    mouseJSON: { clicks: row.mouseJSON?.mouseClicks ?? 0 },
+    keyboardJSON: { clicks: row.keyboardJSON?.keypresses ?? 0 },
+    activeJSON: row.activeJSON || {},
+    activeFlag: row.activeFlag,
+    activeMins: row.activeMins,
+    activeMemo: row.activeMemo || '',
+    userName: '', // not present in API
+    projectName: '', // not present in API
+    taskName: '', // not present in API
+  };
+});
       setScreenshots(screenshots);
 
       // ✅ STEP 2: Generate user options for dropdown
@@ -299,7 +298,7 @@ useEffect(() => {
                 title={`Screenshot at ${new Date(screenshot.timestamp).toLocaleString()}`}
               >
                 <img
-                  src={`https://vw.aisrv.in/node_backend${screenshot.thumbnail}`}
+                  src={screenshot.thumbnail}
                   alt="Thumbnail"
                   className="w-full h-full object-cover rounded-md"
                   onError={(e) => {
@@ -327,7 +326,7 @@ useEffect(() => {
             onClick={(e) => e.stopPropagation()}
           >
             <img
-              src={`https://vw.aisrv.in/node_backend${selected.screenshot}`}
+              src={selected.screenshot}
               alt="Screenshot"
               style={{ width: '100%', maxWidth: '500px', borderRadius: '8px' }}
             />
