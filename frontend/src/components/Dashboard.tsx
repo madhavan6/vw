@@ -89,7 +89,7 @@ export function Dashboard({ currentUser }: DashboardProps) {
       setIsLoading(true);
       setError(null);
 
-      const response = await fetch('http://localhost:5000/api/workdiary/all', {
+      const response = await fetch('https://vw.aisrv.in/node_backend/api/workdiary/all', {
         method: 'GET',
         headers: {
           Accept: 'application/json',
@@ -299,7 +299,7 @@ useEffect(() => {
                 title={`Screenshot at ${new Date(screenshot.timestamp).toLocaleString()}`}
               >
                 <img
-                  src={`http://localhost:5000${screenshot.thumbnail}`}
+                  src={`https://vw.aisrv.in/node_backend${screenshot.thumbnail}`}
                   alt="Thumbnail"
                   className="w-full h-full object-cover rounded-md"
                   onError={(e) => {
@@ -327,7 +327,7 @@ useEffect(() => {
             onClick={(e) => e.stopPropagation()}
           >
             <img
-              src={`http://localhost:5000${selected.screenshot}`}
+              src={`https://vw.aisrv.in/node_backend${selected.screenshot}`}
               alt="Screenshot"
               style={{ width: '100%', maxWidth: '500px', borderRadius: '8px' }}
             />

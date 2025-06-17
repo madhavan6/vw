@@ -2,44 +2,40 @@ const express = require("express");
 const router = express.Router();
 const db = require("../db");
 
-
 router.get('/all', async (req, res) => {
   try {
     const [rows] = await db.query(`
-   SELECT 
-  wd.id,
-  wd.projectID,
-  wd.userID,
-  wd.taskID,
-  wd.screenshotTimeStamp,
-  wd.calcTimeStamp,
-  wd.keyboardJSON,
-  wd.mouseJSON,
-  wd.activeJSON,
-  wd.activeFlag,
-  wd.activeMins,
-  wd.deletedFlag,
-  wd.activeMemo,
-  wd.imageURL,
-  wd.thumbNailURL,
-  wd.createdAt,
-  wd.modifiedAt,
-  u.name AS userName,
-  p.name AS projectName,
-  t.name AS taskName
-FROM workDiary wd
-JOIN users u ON wd.userID = u.id
-JOIN projects p ON wd.projectID = p.id
-JOIN tasks t ON wd.taskID = t.id
-
+      SELECT 
+        id,
+        projectID,
+        userID,
+        taskID,
+        screenshotTimeStamp,
+        calcTimeStamp,
+        keyboardJSON,
+        mouseJSON,
+        activeJSON,
+        activeFlag,
+        activeMins,
+        deletedFlag,
+        activeMemo,
+        imageURL,
+        thumbNailURL,
+        createdAt,
+        modifiedAt,
+        projectName,
+        userName,
+        taskName
+      FROM workDiary
     `);
 
-    res.json(rows); // Send the full result
+    res.json(rows); // Return simplified data
   } catch (error) {
     console.error('Error fetching workDiary:', error);
     res.status(500).json({ error: 'Database fetch error' });
   }
 });
+
 // Simple test route to verify basic functionality
 router.get("/ping", (req, res) => {
   res.json({ status: "ok", message: "WorkDiary routes are working" });
@@ -201,6 +197,17 @@ router.post(
         imageURL,
         thumbNailURL,
       } = req.body;
+
+      // 🔄 Resolve IDs from names if only names are provided
+if (!projectID && projectName) {
+  projectID = await getOrCreateIdFromName("projects", projectName);
+}
+if (!userID && userName) {
+  userID = await getOrCreateIdFromName("users", userName);
+}
+if (!taskID && taskName) {
+  taskID = await getOrCreateIdFromName("tasks", taskName);
+}
 
       // Ensure click counts are numbers
       const mouseClicksNum = parseInt(mouseClicks || "0") || 0;
