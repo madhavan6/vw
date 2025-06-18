@@ -109,28 +109,39 @@ export function Dashboard({ currentUser }: DashboardProps) {
       if (!data || !Array.isArray(data)) {
         throw new Error('Invalid screenshots data');
       }
+const screenshots = data.map((row: any) => {
+  const raw = row.timestamp ?? row.screenshotTimeStamp ?? row.calcTimeStamp;
+const utcDate = raw && typeof raw === "string" ? new Date(raw) : new Date();
+const timestampISO = new Date(utcDate.getTime() + (5.5 * 60 * 60 * 1000)).toISOString(); // IST offset
 
-      const screenshots = data.map((row: any) => {
-        const raw = row.timestamp ?? row.screenshotTimeStamp ?? row.calcTimeStamp;
-        const timestamp = raw && typeof raw === "string" ? raw : new Date().toISOString();
+  let parsedKeyboard = { clicks: 0 };
+  let parsedMouse = { clicks: 0 };
+  let parsedActive = {};
 
-        const keyboardData = row.keyboardJSON || { clicks: 0 };
-        const mouseData = row.mouseJSON || { clicks: 0 };
-        const activeData = row.activeJSON || {};
+  try {
+    parsedKeyboard = row.keyboardJSON ? JSON.parse(row.keyboardJSON) : { clicks: 0 };
+  } catch {}
+  try {
+    parsedMouse = row.mouseJSON ? JSON.parse(row.mouseJSON) : { clicks: 0 };
+  } catch {}
+  try {
+    parsedActive = row.activeJSON ? JSON.parse(row.activeJSON) : {};
+  } catch {}
+
   return {
     id: row.id,
     projectID: row.projectID,
     userID: row.userID,
     taskID: row.taskID,
-    timestamp: row.screenshotTimeStamp ?? new Date().toISOString(),
-    screenshot: row.imageURL, // already full URL
-    thumbnail: row.thumbNailURL, // already full URL
-    mouseJSON: { clicks: row.mouseJSON?.mouseClicks ?? 0 },
-    keyboardJSON: { clicks: row.keyboardJSON?.keypresses ?? 0 },
-    activeJSON: row.activeJSON || {},
-    activeFlag: row.activeFlag,
-    activeMins: row.activeMins,
-    activeMemo: row.activeMemo || '',
+    timestamp: timestampISO, // ✅ IST timestamp
+    screenshot: row.imageURL,
+    thumbnail: row.thumbNailURL,
+    mouseJSON: parsedMouse,
+    keyboardJSON: parsedKeyboard,
+    activeJSON: parsedActive,
+    activeFlag: row.activeFlag ?? false,
+    activeMins: row.activeMins ?? 0,
+    activeMemo: row.activeMemo ?? '',
     userName: row.userName ?? 'N/A',
     projectName: row.projectName ?? 'N/A',
     taskName: row.taskName ?? 'N/A',
@@ -326,21 +337,26 @@ useEffect(() => {
           onClick={() => setSelected(null)}
         >
           <div
-            className="bg-white rounded-lg p-6 max-w-5xl max-h-[80vh] overflow-auto text-black flex gap-6"
+             className="bg-white rounded-lg p-6 w-[90vw] max-h-[90vh] overflow-auto text-black flex gap-6"
             onClick={(e) => e.stopPropagation()}
           >
-    <img
-  src={selected.screenshot.startsWith('http')
-    ? selected.screenshot
-    : `https://vw.aisrv.in/node_backend${selected.screenshot}`}
-  alt="Screenshot"
-  style={{ width: '100%', maxWidth: '500px', borderRadius: '8px' }}
-  onError={(e) => {
-    const img = e.target as HTMLImageElement;
-    img.src =
-      'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAUAAAAFCAYAAACNbyblAAAAHElEQVQI12P4//8/w38GIAXDIBKE0DHxgljNBAAO9TXL0Y4OHwAAAABJRU5ErkJggg==';
-  }}
-/>
+   <div className="flex-shrink-0">
+  <img
+    src={
+      selected.screenshot.startsWith('http')
+        ? selected.screenshot
+        : `https://vw.aisrv.in/node_backend${selected.screenshot}`
+    }
+    alt="Screenshot"
+    className="h-auto max-h-[80vh] rounded-md"
+    onError={(e) => {
+      const img = e.target as HTMLImageElement;
+      img.src =
+        'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAUAAAAFCAYAAACNbyblAAAAHElEQVQI12P4//8/w38GIAXDIBKE0DHxgljNBAAO9TXL0Y4OHwAAAABJRU5ErkJggg==';
+    }}
+  />
+</div>
+
 
             <div className="flex-1">
               <h3 className="text-xl font-semibold mb-4">Activity Details</h3>
@@ -361,29 +377,31 @@ useEffect(() => {
                 </div>
               </div>
 
-              {/* Other activity data */}
-              <div className="space-y-4 mt-6">
-                <div className="flex justify-between">
-                  <span>Mouse Clicks:</span>
-                  <span>{selected.mouseJSON?.clicks ?? 0}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Keyboard Clicks:</span>
-                  <span>{selected.keyboardJSON?.clicks ?? 0}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Active Minutes:</span>
-                  <span>{selected.activeMins ?? 0}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Active Memo:</span>
-                  <span>{selected.activeMemo || 'N/A'}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Timestamp:</span>
-                  <span>{new Date(selected.timestamp).toLocaleString()}</span>
-                </div>
-              </div>
+      <div className="space-y-4 mt-6">
+  <div className="flex justify-between">
+    <span>Mouse Clicks:</span>
+    <span>{selected.mouseJSON?.clicks ?? 0}</span>
+  </div>
+  <div className="flex justify-between">
+    <span>Keyboard Clicks:</span>
+    <span>{selected.keyboardJSON?.clicks ?? 0}</span>
+  </div>
+  <div className="flex justify-between">
+    <span>Active Minutes:</span>
+    <span>{selected.activeMins ?? 0}</span>
+  </div>
+  <div className="flex justify-between">
+    <span>Active Memo:</span>
+    <span>{selected.activeMemo || 'N/A'}</span>
+  </div>
+   <div className="flex justify-between">
+    <span>Timestamp:</span>
+    <span>{new Date(selected.timestamp).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}</span>
+
+  </div>
+</div>
+
+
 
               {/* Close button */}
               <div className="mt-6 flex justify-center">
