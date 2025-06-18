@@ -89,7 +89,7 @@ export function Dashboard({ currentUser }: DashboardProps) {
       setIsLoading(true);
       setError(null);
 
-     const response = await fetch('https://vw.aisrv.in/node_backend/getProjectsV4', {
+     const response = await fetch('https://vw.aisrv.in/node_backend/getProjectsV5', {
   method: 'GET',
   headers: {
     Accept: 'application/json',
@@ -131,9 +131,9 @@ export function Dashboard({ currentUser }: DashboardProps) {
     activeFlag: row.activeFlag,
     activeMins: row.activeMins,
     activeMemo: row.activeMemo || '',
-    userName: '', // not present in API
-    projectName: '', // not present in API
-    taskName: '', // not present in API
+    userName: row.userName ?? 'N/A',
+    projectName: row.projectName ?? 'N/A',
+    taskName: row.taskName ?? 'N/A',
   };
 });
       setScreenshots(screenshots);
@@ -297,16 +297,20 @@ useEffect(() => {
                 onClick={() => handleScreenshotClick(screenshot)}
                 title={`Screenshot at ${new Date(screenshot.timestamp).toLocaleString()}`}
               >
-                <img
-                  src={screenshot.thumbnail}
-                  alt="Thumbnail"
-                  className="w-full h-full object-cover rounded-md"
-                  onError={(e) => {
-                    const img = e.target as HTMLImageElement;
-                    img.src =
-                      'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAUAAAAFCAYAAACNbyblAAAAHElEQVQI12P4//8/w38GIAXDIBKE0DHxgljNBAAO9TXL0Y4OHwAAAABJRU5ErkJggg==';
-                  }}
-                />
+     <img
+  src={screenshot.thumbnail.startsWith('http')
+    ? screenshot.thumbnail
+    : `https://vw.aisrv.in/node_backend${screenshot.thumbnail}`}
+  alt="Thumbnail"
+  className="w-full h-full object-cover rounded-md"
+  onError={(e) => {
+    const img = e.target as HTMLImageElement;
+    img.src =
+      'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAUAAAAFCAYAAACNbyblAAAAHElEQVQI12P4//8/w38GIAXDIBKE0DHxgljNBAAO9TXL0Y4OHwAAAABJRU5ErkJggg==';
+  }}
+/>
+
+
               </div>
               
                 ))}
@@ -325,11 +329,19 @@ useEffect(() => {
             className="bg-white rounded-lg p-6 max-w-5xl max-h-[80vh] overflow-auto text-black flex gap-6"
             onClick={(e) => e.stopPropagation()}
           >
-            <img
-              src={selected.screenshot}
-              alt="Screenshot"
-              style={{ width: '100%', maxWidth: '500px', borderRadius: '8px' }}
-            />
+    <img
+  src={selected.screenshot.startsWith('http')
+    ? selected.screenshot
+    : `https://vw.aisrv.in/node_backend${selected.screenshot}`}
+  alt="Screenshot"
+  style={{ width: '100%', maxWidth: '500px', borderRadius: '8px' }}
+  onError={(e) => {
+    const img = e.target as HTMLImageElement;
+    img.src =
+      'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAUAAAAFCAYAAACNbyblAAAAHElEQVQI12P4//8/w38GIAXDIBKE0DHxgljNBAAO9TXL0Y4OHwAAAABJRU5ErkJggg==';
+  }}
+/>
+
             <div className="flex-1">
               <h3 className="text-xl font-semibold mb-4">Activity Details</h3>
 
