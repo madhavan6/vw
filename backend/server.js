@@ -27,26 +27,21 @@ app.post('/postProjectV1', async (req, res) => {
     const {
       projectID,
       userID,
-      taskID,
+    taskID,
       screenshotTimeStamp,
       calcTimeStamp,
-      keyboardJSON,
-      mouseJSON,
       activeJSON,
-      activeFlag,
       activeMins,
       deletedFlag,
       activeMemo,
-      imageURL,         // contains base64 image
-      thumbNailURL,     // contains base64 thumbnail
+      imageURL,         // base64 image
+      thumbNailURL      // base64 thumbnail
     } = req.body;
 
-    // Validate required fields
     if (!imageURL || !thumbNailURL || !projectID || !userID || !taskID) {
       return res.status(400).json({ error: 'Missing required fields' });
     }
 
-    // Decode and save screenshot
     const screenshotMatch = imageURL.match(/^data:image\/(png|jpeg|jpg);base64,(.*)$/);
     const thumbnailMatch = thumbNailURL.match(/^data:image\/(png|jpeg|jpg);base64,(.*)$/);
 
@@ -55,41 +50,48 @@ app.post('/postProjectV1', async (req, res) => {
     }
 
     const screenshotExt = screenshotMatch[1];
-     const screenshotBuffer = Buffer.from(screenshotMatch[2], 'base64');
+    const screenshotBuffer = Buffer.from(screenshotMatch[2], 'base64');
     const screenshotFileName = `screenshot_${Date.now()}.${screenshotExt}`;
     const screenshotPath = path.join(imageDir, screenshotFileName);
     fs.writeFileSync(screenshotPath, screenshotBuffer);
     const savedImageURL = `/images/${screenshotFileName}`;
-
-    const thumbExt = thumbnailMatch[1];
+     const thumbExt = thumbnailMatch[1];
     const thumbBuffer = Buffer.from(thumbnailMatch[2], 'base64');
     const thumbFileName = `thumb_${Date.now()}.${thumbExt}`;
     const thumbPath = path.join(imageDir, thumbFileName);
     fs.writeFileSync(thumbPath, thumbBuffer);
     const savedThumbURL = `/images/${thumbFileName}`;
 
-    // Insert into DB
-await db.query(
-  `INSERT INTO workDiary (
-    projectID, userID, taskID, screenshotTimeStamp, calcTimeStamp,
-    keyboardJSON, mouseJSON, activeJSON, activeFlag, activeMins,
-    deletedFlag, activeMemo, imageURL, thumbNailURL,
-    createdAt, modifiedAt
-  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())`,
-  [
-    projectID, userID, taskID, new Date(screenshotTimeStamp).toISOString().slice(0, 19).replace('T', ' '),
-  new Date(calcTimeStamp).toISOString().slice(0, 19).replace('T', ' '),
-    JSON.stringify(keyboardJSON), JSON.stringify(mouseJSON), JSON.stringify(activeJSON),
-    activeFlag, activeMins, deletedFlag, activeMemo,
-    savedImageURL, savedThumbURL
- ]
-);
+    const formattedScreenshotTime = new Date(screenshotTimeStamp).toISOString().replace('T', ' ').slice(0, 19);
+    const formattedCalcTime = new Date(calcTimeStamp).toISOString().replace('T', ' ').slice(0, 19);
 
+    await db.execute(
+      `
+      INSERT INTO workDiary (
+        projectID, userID, taskID, screenshotTimeStamp, calcTimeStamp,
+        activeJSON, activeMins, deletedFlag, activeMemo,
+        imageURL, thumbNailURL
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `,
+      [
+        projectID,
+        userID,
+        taskID,
+        formattedScreenshotTime,
+        formattedCalcTime,
+        JSON.stringify(activeJSON),
+        activeMins,
+        deletedFlag,
+        activeMemo,
+        savedImageURL,
+        savedThumbURL
+      ]
+    );
 
     res.status(200).json({
-      message: 'Screenshot and thumbnail saved successfully',
+      message: 'Screenshot and activity data saved successfully',
       imageURL: savedImageURL,
-      thumbNailURL: savedThumbURL,
+      thumbNailURL: savedThumbURL
     });
   } catch (error) {
     console.error('❌ Error processing request:', error);
@@ -97,8 +99,150 @@ await db.query(
   }
 });
 
+//GET ROUTES
+app.get('/getProjectsV6', async (req, res) => {
+  try {
+    const [rows] = await db.execute(`
+      SELECT
+        wd.id, wd.projectID, wd.userID, wd.taskID,
+        wd.screenshotTimeStamp,
+        wd.activeJSON, wd.activeMins, wd.deletedFlag, wd.activeMemo,
+        wd.imageURL, wd.thumbNailURL, wd.createdAt, wd.modifiedAt,
+        u.name AS userName,
+        p.name AS projectName,
+          t.name AS taskName
+      FROM workDiary wd
+      LEFT JOIN users u ON wd.userID = u.id
+      LEFT JOIN projects p ON wd.projectID = p.id
+      LEFT JOIN tasks t ON wd.taskID = t.id
+      WHERE wd.deletedFlag = 0
+      ORDER BY wd.screenshotTimeStamp DESC
+    `);
+
+    const data = rows.map((row) => {
+      let parsedActiveJSON = [];
+
+      try {
+        const raw = Array.isArray(row.activeJSON) ? row.activeJSON : [];
+        parsedActiveJSON = raw.map(item => [
+          item.mouse ?? 0,
+          item.keyboard ?? 0,
+          item.active ?? 0
+        ]);
+      } catch (e) {
+        console.warn('  Error processing activeJSON for ID:', row.id, e.message);
+        parsedActiveJSON = [];
+      }
+
+      return {
+        id: row.id,
+        projectID: row.projectID,
+          userID: row.userID,
+        taskID: row.taskID,
+        screenshotTimeStamp: row.screenshotTimeStamp,
+        activeJSON: parsedActiveJSON,
+        activeMins: row.activeMins,
+        deletedFlag: row.deletedFlag,
+        activeMemo: row.activeMemo,
+        imageURL: row.imageURL,
+        thumbNailURL: row.thumbNailURL,
+        createdAt: row.createdAt,
+        modifiedAt: row.modifiedAt,
+        userName: row.userName ?? 'N/A',
+        projectName: row.projectName ?? 'N/A',
+        taskName: row.taskName ?? 'N/A'
+      };
+    });
+
+    res.status(200).json(data);
+  } catch (error) {
+    console.error('❌ Error fetching activity data:', error);
+    res.status(500).json({ error: 'Server error', details: error.message });
+  }
+});
+
+app.get('/getProjectsV5', async (req, res) => {
+  try {
+    const [rows] = await db.query(`
+      SELECT
+       wd.*,
+        u.name AS userName,
+        p.name AS projectName,
+        t.name AS taskName
+      FROM workDiary wd
+      LEFT JOIN users u ON wd.userID = u.id
+      LEFT JOIN projects p ON wd.projectID = p.id
+      LEFT JOIN tasks t ON wd.taskID = t.id
+      ORDER BY wd.screenshotTimeStamp DESC
+    `);
+
+    res.json(rows);
+  } catch (error) {
+    console.error('Error fetching work diary with names:', error);
+    res.status(500).json({ error: 'Failed to fetch work diary data' });
+  }
+});app.get('/getProjectsV5', async (req, res) => {
+  try {
+    const [rows] = await db.query(`
+      SELECT
+        wd.*,
+        u.name AS userName,
+        p.name AS projectName,
+        t.name AS taskName
+      FROM workDiary wd
+      LEFT JOIN users u ON wd.userID = u.id
+      LEFT JOIN projects p ON wd.projectID = p.id
+      LEFT JOIN tasks t ON wd.taskID = t.id
+       ORDER BY wd.screenshotTimeStamp DESC
+    `);
+
+    const parsedRows = rows.map(row => {
+      let keyboardJSON = {};
+      let mouseJSON = {};
+      let activeJSON = {};
+
+      try {
+        keyboardJSON = row.keyboardJSON ? JSON.parse(row.keyboardJSON) : {};
+      } catch (e) {
+        console.error('Error parsing keyboardJSON:', e.message);
+      }
+
+      try {
+        mouseJSON = row.mouseJSON ? JSON.parse(row.mouseJSON) : {};
+      } catch (e) {
+        console.error('Error parsing mouseJSON:', e.message);
+      }
+
+      try {
+        activeJSON = row.activeJSON ? JSON.parse(row.activeJSON) : {};
+      } catch (e) {
+        console.error('Error parsing activeJSON:', e.message);
+      }
+
+      return {
+          ...row,
+        keyboardJSON,
+        mouseJSON,
+        activeJSON
+      };
+    });
+
+    res.json(parsedRows);
+  } catch (error) {
+    console.error('Error fetching work diary with names:', error);
+    res.status(500).json({ error: 'Failed to fetch work diary data' });
+  }
+});
+
 
 // Fix your GET routes (close the brackets properly)
+app.get('/getProjectsV2', async (req, res) => {
+  try {
+    const [rows] = await db.query('SELECT * FROM projects');
+    res.status(200).json(rows);
+  } catch (error) {
+    console.error('❌ Error fetching projects:', error.message);
+    // Fix your GET routes (close the brackets properly)
 app.get('/getProjectsV2', async (req, res) => {
   try {
     const [rows] = await db.query('SELECT * FROM projects');
@@ -125,7 +269,7 @@ app.get('/getProjectsV4', async (req, res) => {
     res.status(200).json(rows);
   } catch (error) {
     console.error('❌ Error fetching workDiary:', error.message);
-    res.status(500).json({ error: 'Failed to fetch workDiary', details: error.message });
+      res.status(500).json({ error: 'Failed to fetch workDiary', details: error.message });
   }
 });
 
@@ -133,3 +277,4 @@ app.get('/getProjectsV4', async (req, res) => {
 app.listen(port, () => {
   console.log(`✅ Server running on http://0.0.0.0:${port}`);
 });
+                                            

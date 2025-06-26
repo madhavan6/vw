@@ -89,7 +89,8 @@ export function Dashboard({ currentUser }: DashboardProps) {
       setIsLoading(true);
       setError(null);
 
-     const response = await fetch('https://vw.aisrv.in/node_backend/getProjectsV5', {
+    const response = await fetch('https://vw.aisrv.in/node_backend/getProjectsV6', {
+
   method: 'GET',
   headers: {
     Accept: 'application/json',
@@ -110,42 +111,45 @@ export function Dashboard({ currentUser }: DashboardProps) {
         throw new Error('Invalid screenshots data');
       }
 const screenshots = data.map((row: any) => {
-  const raw = row.timestamp ?? row.screenshotTimeStamp ?? row.calcTimeStamp;
+const raw = row.screenshotTimeStamp;
 const utcDate = raw && typeof raw === "string" ? new Date(raw) : new Date();
 const timestampISO = new Date(utcDate.getTime() + (5.5 * 60 * 60 * 1000)).toISOString(); // IST offset
 
-  let parsedKeyboard = { clicks: 0 };
-  let parsedMouse = { clicks: 0 };
-  let parsedActive = {};
+  let parsedActive: number[][] = [];
+try {
+  parsedActive = Array.isArray(row.activeJSON)
+    ? row.activeJSON
+    : row.activeJSON
+    ? JSON.parse(row.activeJSON)
+    : [];
+} catch {
+  parsedActive = [];
+}
 
-  try {
-    parsedKeyboard = row.keyboardJSON ? JSON.parse(row.keyboardJSON) : { clicks: 0 };
-  } catch {}
-  try {
-    parsedMouse = row.mouseJSON ? JSON.parse(row.mouseJSON) : { clicks: 0 };
-  } catch {}
-  try {
-    parsedActive = row.activeJSON ? JSON.parse(row.activeJSON) : {};
-  } catch {}
+// ✅ Sum mouse and keyboard clicks from activeJSON
+const totalMouseClicks = parsedActive.reduce((sum, entry) => sum + (entry[0] || 0), 0);
+const totalKeyboardClicks = parsedActive.reduce((sum, entry) => sum + (entry[1] || 0), 0);
 
-  return {
-    id: row.id,
-    projectID: row.projectID,
-    userID: row.userID,
-    taskID: row.taskID,
-    timestamp: timestampISO, // ✅ IST timestamp
-    screenshot: row.imageURL,
-    thumbnail: row.thumbNailURL,
-    mouseJSON: parsedMouse,
-    keyboardJSON: parsedKeyboard,
-    activeJSON: parsedActive,
-    activeFlag: row.activeFlag ?? false,
-    activeMins: row.activeMins ?? 0,
-    activeMemo: row.activeMemo ?? '',
-    userName: row.userName ?? 'N/A',
-    projectName: row.projectName ?? 'N/A',
-    taskName: row.taskName ?? 'N/A',
-  };
+ return {
+  id: row.id,
+  projectID: row.projectID,
+  userID: row.userID,
+  taskID: row.taskID,
+  timestamp: timestampISO,
+  screenshot: row.imageURL,
+  thumbnail: row.thumbNailURL,
+  activeJSON: parsedActive,
+  activeFlag: row.activeFlag ?? false,
+  activeMins: row.activeMins ?? 0,
+  activeMemo: row.activeMemo ?? '',
+  userName: row.userName ?? 'N/A',
+  projectName: row.projectName ?? 'N/A',
+  taskName: row.taskName ?? 'N/A',
+  // ✅ Use computed values
+  mouseJSON: { clicks: totalMouseClicks },
+  keyboardJSON: { clicks: totalKeyboardClicks },
+};
+
 });
       setScreenshots(screenshots);
 
@@ -302,27 +306,46 @@ useEffect(() => {
               <h2 className="text-xl font-semibold mb-4">{hourRange}</h2>
               <div className="flex flex-wrap gap-4">
                 {entries.map((screenshot) => (
-                <div
-                key={screenshot.id}
-                className="w-32 h-20 cursor-pointer relative rounded-md overflow-hidden border border-gray-300 dark:border-gray-600"
-                onClick={() => handleScreenshotClick(screenshot)}
-                title={`Screenshot at ${new Date(screenshot.timestamp).toLocaleString()}`}
-              >
-     <img
-  src={screenshot.thumbnail.startsWith('http')
-    ? screenshot.thumbnail
-    : `https://vw.aisrv.in/node_backend${screenshot.thumbnail}`}
-  alt="Thumbnail"
-  className="w-full h-full object-cover rounded-md"
-  onError={(e) => {
-    const img = e.target as HTMLImageElement;
-    img.src =
-      'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAUAAAAFCAYAAACNbyblAAAAHElEQVQI12P4//8/w38GIAXDIBKE0DHxgljNBAAO9TXL0Y4OHwAAAABJRU5ErkJggg==';
-  }}
-/>
+            <div
+  key={screenshot.id}
+  className="w-32 cursor-pointer"
+  onClick={() => handleScreenshotClick(screenshot)}
+  title={`Screenshot at ${new Date(screenshot.timestamp).toLocaleString()}`}
+>
+  {/* Thumbnail Container */}
+  <div className="border border-gray-300 dark:border-gray-600 rounded-md overflow-hidden">
+    <img
+      src={
+        screenshot.thumbnail.startsWith('http')
+          ? screenshot.thumbnail
+          : `https://vw.aisrv.in/node_backend${screenshot.thumbnail}`
+      }
+      alt="Thumbnail"
+      className="w-full h-20 object-cover"
+      onError={(e) => {
+        const img = e.target as HTMLImageElement;
+        img.src =
+          'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAUAAAAFCAYAAACNbyblAAAAHElEQVQI12P4//8/w38GIAXDIBKE0DHxgljNBAAO9TXL0Y4OHwAAAABJRU5ErkJggg==';
+      }}
+    />
+  </div>
+
+  {/* Activity Line BELOW the thumbnail */}
+  {Array.isArray(screenshot.activeJSON) && (
+    <div className="flex justify-between items-center gap-[1px] mt-1 px-[2px]">
+      {screenshot.activeJSON.slice(0, 10).map((entry: any, index: number) => (
+        <div
+          key={index}
+          className={`h-[4px] flex-1 rounded-sm ${
+            entry[2] === 1 ? 'bg-green-500' : 'bg-gray-300'
+          }`}
+        ></div>
+      ))}
+    </div>
+  )}
+</div>
 
 
-              </div>
               
                 ))}
               </div>
@@ -332,89 +355,135 @@ useEffect(() => {
       )}
       {/* Modal */}
       {selected && (
-        <div
-          className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50"
-          onClick={() => setSelected(null)}
-        >
-          <div
-             className="bg-white rounded-lg p-6 w-[90vw] max-h-[90vh] overflow-auto text-black flex gap-6"
-            onClick={(e) => e.stopPropagation()}
-          >
-   <div className="flex-shrink-0">
-  <img
-    src={
-      selected.screenshot.startsWith('http')
-        ? selected.screenshot
-        : `https://vw.aisrv.in/node_backend${selected.screenshot}`
-    }
-    alt="Screenshot"
-    className="h-auto max-h-[80vh] rounded-md"
-    onError={(e) => {
-      const img = e.target as HTMLImageElement;
-      img.src =
-        'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAUAAAAFCAYAAACNbyblAAAAHElEQVQI12P4//8/w38GIAXDIBKE0DHxgljNBAAO9TXL0Y4OHwAAAABJRU5ErkJggg==';
-    }}
-  />
-</div>
+<div
+  className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50"
+  onClick={() => setSelected(null)}
+>
+  <div
+    className="bg-white rounded-lg p-6 w-[95vw] max-w-[1300px] max-h-[95vh] overflow-y-auto text-black"
+    onClick={(e) => e.stopPropagation()}
+  >
+    {/* Row: Screenshot + Details */}
+    <div className="flex flex-col lg:flex-row gap-6 mb-6">
+      {/* Screenshot */}
+      <div className="w-full lg:w-1/2 flex-shrink-0">
+        <img
+          src={
+            selected.screenshot.startsWith('http')
+              ? selected.screenshot
+              : `https://vw.aisrv.in/node_backend${selected.screenshot}`
+          }
+          alt="Screenshot"
+          className="w-full h-auto rounded-md max-h-[70vh]"
+        />
+      </div>
 
-
-            <div className="flex-1">
-              <h3 className="text-xl font-semibold mb-4">Activity Details</h3>
-
-              {/* User / Project / Task Names */}
-              <div className="space-y-3">
-                <div className="flex justify-between">
-                  <span>User Name:</span>
-                  <span>{selected.userName || 'N/A'}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Project Name:</span>
-                  <span>{selected.projectName || 'N/A'}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Task Name:</span>
-                  <span>{selected.taskName || 'N/A'}</span>
-                </div>
-              </div>
-
-      <div className="space-y-4 mt-6">
-  <div className="flex justify-between">
-    <span>Mouse Clicks:</span>
-    <span>{selected.mouseJSON?.clicks ?? 0}</span>
-  </div>
-  <div className="flex justify-between">
-    <span>Keyboard Clicks:</span>
-    <span>{selected.keyboardJSON?.clicks ?? 0}</span>
-  </div>
-  <div className="flex justify-between">
-    <span>Active Minutes:</span>
-    <span>{selected.activeMins ?? 0}</span>
-  </div>
-  <div className="flex justify-between">
-    <span>Active Memo:</span>
-    <span>{selected.activeMemo || 'N/A'}</span>
-  </div>
-   <div className="flex justify-between">
-    <span>Timestamp:</span>
-    <span>{new Date(selected.timestamp).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}</span>
-
-  </div>
-</div>
-
-
-
-              {/* Close button */}
-              <div className="mt-6 flex justify-center">
-                <button
-                  onClick={() => setSelected(null)}
-                  className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700"
-                >
-                  Close
-                </button>
-              </div>
-            </div>
-          </div>
+      {/* Activity Details */}
+      <div className="w-full lg:w-1/2 text-sm space-y-3">
+        <h3 className="text-xl font-semibold mb-2">Activity Details</h3>
+        <div className="flex justify-between">
+          <span>User Name:</span>
+          <span>{selected.userName || 'N/A'}</span>
         </div>
+        <div className="flex justify-between">
+          <span>Project Name:</span>
+          <span>{selected.projectName || 'N/A'}</span>
+        </div>
+        <div className="flex justify-between">
+          <span>Task Name:</span>
+          <span>{selected.taskName || 'N/A'}</span>
+        </div>
+        <div className="flex justify-between">
+          <span>Mouse Clicks:</span>
+          <span>
+            {Array.isArray(selected.activeJSON)
+              ? selected.activeJSON.reduce((sum, entry) => sum + (entry[0] || 0), 0)
+              : selected.mouseJSON?.clicks ?? 0}
+          </span>
+        </div>
+        <div className="flex justify-between">
+          <span>Keyboard Clicks:</span>
+          <span>
+            {Array.isArray(selected.activeJSON)
+              ? selected.activeJSON.reduce((sum, entry) => sum + (entry[1] || 0), 0)
+              : selected.keyboardJSON?.clicks ?? 0}
+          </span>
+        </div>
+        <div className="flex justify-between">
+          <span>Active Minutes:</span>
+          <span>{selected.activeMins ?? 0}</span>
+        </div>
+        <div className="flex justify-between">
+          <span>Active Memo:</span>
+          <span>{selected.activeMemo || 'N/A'}</span>
+        </div>
+        <div className="flex justify-between">
+          <span>Timestamp:</span>
+          <span>
+            {new Date(selected.timestamp).toLocaleString('en-IN', {
+              timeZone: 'Asia/Kolkata',
+            })}
+          </span>
+        </div>
+      </div>
+    </div>
+
+    {/* Table */}
+    {Array.isArray(selected.activeJSON) && selected.activeJSON.length > 0 && (
+      <div className="overflow-x-auto mb-6">
+        <h4 className="text-lg font-semibold mb-2">Minute-wise Activity (Last 10 mins)</h4>
+        <table className="w-full text-xs border-collapse border border-gray-300 dark:border-gray-600">
+         <thead className="bg-gray-200 dark:bg-gray-300">
+            <tr>
+              <th className="border px-1 py-1 text-left">Metric</th>
+              {selected.activeJSON.map((_, index) => (
+                <th key={index} className="border px-1 py-1 text-center">Min {index + 1}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td className="border px-1 py-1 font-medium">Mouse Clicks</td>
+              {selected.activeJSON.map((entry: any, index: number) => (
+                <td key={index} className="border px-1 py-1 text-center">{entry[0]}</td>
+              ))}
+            </tr>
+            <tr>
+              <td className="border px-1 py-1 font-medium">Keyboard Clicks</td>
+              {selected.activeJSON.map((entry: any, index: number) => (
+                <td key={index} className="border px-1 py-1 text-center">{entry[1]}</td>
+              ))}
+            </tr>
+            <tr>
+              <td className="border px-1 py-1 font-medium">Active</td>
+              {selected.activeJSON.map((entry: any, index: number) => (
+                <td key={index} className="border px-1 py-1 text-center">
+                  {entry[2] === 1 ? (
+                    <span className="text-green-600 font-medium">Yes</span>
+                  ) : (
+                    <span className="text-red-500 font-medium">No</span>
+                  )}
+                </td>
+              ))}
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    )}
+
+    {/* Close Button */}
+    <div className="flex justify-end">
+      <button
+        onClick={() => setSelected(null)}
+        className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700"
+      >
+        Close
+      </button>
+    </div>
+  </div>
+</div>
+
+
       )}
 
     </div> 
