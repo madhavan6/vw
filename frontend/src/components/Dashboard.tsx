@@ -219,33 +219,71 @@ useEffect(() => {
     <div className="flex items-center gap-2">
       <label className="font-medium text-sm dark:text-white">User Name:</label>
       <div className="w-[200px]">
-        <Select
-          options={userOptions}
-          value={selectedUser}
-          onChange={setSelectedUser}
-          isClearable
-          placeholder="Select User"
-          className="text-sm"
-          styles={{
-            control: (base, state) => ({
-              ...base,
-              height: '36px',
-              backgroundColor: '#1a202c',
-              borderColor: state.isFocused ? '#4a5568' : '#2d3748',
-              color: '#fff',
-              boxShadow: 'none',
-            }),
-            input: (base) => ({ ...base, color: '#fff' }),
-            placeholder: (base) => ({ ...base, color: '#a0aec0' }),
-            singleValue: (base) => ({ ...base, color: '#fff' }),
-            menu: (base) => ({ ...base, backgroundColor: '#1a202c', color: '#fff' }),
-            option: (base, { isFocused }) => ({
-              ...base,
-              backgroundColor: isFocused ? '#2d3748' : '#1a202c',
-              color: '#fff',
-            }),
-          }}
-        />
+ <div className="w-[200px]">
+  <Select
+    options={userOptions}
+    value={selectedUser}
+    onChange={setSelectedUser}
+    isClearable
+    placeholder="Select User"
+    classNamePrefix="react-select"
+  />
+</div>
+<style>
+  {`
+    /* Light mode default */
+    .react-select__control {
+      background-color: white;
+      color: black;
+    }
+
+    .react-select__menu {
+      background-color: white;
+      color: black;
+    }
+
+    .react-select__option {
+      background-color: white;
+      color: black;
+    }
+
+    .react-select__option--is-focused {
+      background-color: #e2e8f0; /* Light gray hover */
+    }
+
+    /* Dark mode override */
+    .dark .react-select__control {
+      background-color: #1f2937; /* gray-800 */
+      color: white;
+      border-color: #4b5563;
+    }
+
+    .dark .react-select__menu {
+      background-color: #1f2937;
+      color: white;
+    }
+
+    .dark .react-select__option {
+      background-color: #1f2937;
+      color: white;
+    }
+
+    .dark .react-select__option--is-focused {
+      background-color: #374151; /* darker gray on hover */
+    }
+
+    .dark .react-select__single-value {
+      color: white;
+    }
+
+    .dark .react-select__placeholder {
+      color: #a0aec0;
+    }
+  `}
+</style>
+
+
+
       </div>
     </div>
 
