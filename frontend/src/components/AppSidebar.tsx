@@ -1,6 +1,5 @@
-
 import React from 'react';
-import { BarChart3, User, Menu } from 'lucide-react';
+import { BarChart3, User, Menu, ClipboardList } from 'lucide-react'; // Import icon for Task Manager
 import {
   Sidebar,
   SidebarContent,
@@ -48,9 +47,10 @@ export function AppSidebar({ activeSection, onSectionChange, currentUser, onSign
     <Sidebar className="border-r bg-sidebar">
       <SidebarHeader className="border-b border-sidebar-border p-4">
         <div className="flex items-center justify-between">
-          <div className="flex items-center justify-center w-12 h-12 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg">
-            <span className="text-white font-bold text-xl">VW</span>
+          <div className="flex items-center justify-center w-12 h-12">
+            <img src="/Final.png" alt="My Logo" className="w-12 h-12 object-contain rounded-lg" />
           </div>
+
           {isMobile && (
             <SidebarTrigger>
               <Button variant="ghost" size="icon">
@@ -66,6 +66,21 @@ export function AppSidebar({ activeSection, onSectionChange, currentUser, onSign
           <SidebarGroupLabel>Navigation</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
+              {/* New Task Manager button */}
+              <SidebarMenuItem key="taskmanager">
+                <SidebarMenuItem key="taskmanager">
+  <SidebarMenuButton
+    onClick={() => window.location.href = 'https://vw.aisrv.in/sunderesh/#/dashboard'}
+    isActive={false}
+    className="w-full"
+  >
+    <ClipboardList className="h-4 w-4" />
+    <span>Task Manager</span>
+  </SidebarMenuButton>
+</SidebarMenuItem>
+
+              </SidebarMenuItem>
+
               {menuItems.map((item) => (
                 <SidebarMenuItem key={item.id}>
                   <SidebarMenuButton
