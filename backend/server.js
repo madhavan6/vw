@@ -16,26 +16,21 @@ if (!fs.existsSync(imageDir)) {
 }
 app.use('/images', express.static(imageDir));
 
-// Test route
-app.post('/test', (req, res) => {
-  res.send({ status: 'success' });
-});
-
-// Screenshot upload + DB insert route
+// Upload screenshot and insert into DB
 app.post('/postProjectV1', async (req, res) => {
   try {
     const {
       projectID,
       userID,
-    taskID,
+      taskID,
       screenshotTimeStamp,
       calcTimeStamp,
       activeJSON,
       activeMins,
       deletedFlag,
       activeMemo,
-      imageURL,         // base64 image
-      thumbNailURL      // base64 thumbnail
+      imageURL,
+      thumbNailURL
     } = req.body;
 
     if (!imageURL || !thumbNailURL || !projectID || !userID || !taskID) {
@@ -55,7 +50,8 @@ app.post('/postProjectV1', async (req, res) => {
     const screenshotPath = path.join(imageDir, screenshotFileName);
     fs.writeFileSync(screenshotPath, screenshotBuffer);
     const savedImageURL = `/images/${screenshotFileName}`;
-     const thumbExt = thumbnailMatch[1];
+
+    const thumbExt = thumbnailMatch[1];
     const thumbBuffer = Buffer.from(thumbnailMatch[2], 'base64');
     const thumbFileName = `thumb_${Date.now()}.${thumbExt}`;
     const thumbPath = path.join(imageDir, thumbFileName);
@@ -66,13 +62,11 @@ app.post('/postProjectV1', async (req, res) => {
     const formattedCalcTime = new Date(calcTimeStamp).toISOString().replace('T', ' ').slice(0, 19);
 
     await db.execute(
-      `
-      INSERT INTO workDiary (
+      `INSERT INTO workDiary (
         projectID, userID, taskID, screenshotTimeStamp, calcTimeStamp,
         activeJSON, activeMins, deletedFlag, activeMemo,
         imageURL, thumbNailURL
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `,
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         projectID,
         userID,
@@ -99,7 +93,7 @@ app.post('/postProjectV1', async (req, res) => {
   }
 });
 
-//GET ROUTES
+// GET route with joined names (latest version)
 app.get('/getProjectsV6', async (req, res) => {
   try {
     const [rows] = await db.execute(`
@@ -110,7 +104,7 @@ app.get('/getProjectsV6', async (req, res) => {
         wd.imageURL, wd.thumbNailURL, wd.createdAt, wd.modifiedAt,
         u.name AS userName,
         p.name AS projectName,
-          t.name AS taskName
+        t.name AS taskName
       FROM workDiary wd
       LEFT JOIN users u ON wd.userID = u.id
       LEFT JOIN projects p ON wd.projectID = p.id
@@ -131,13 +125,12 @@ app.get('/getProjectsV6', async (req, res) => {
         ]);
       } catch (e) {
         console.warn('  Error processing activeJSON for ID:', row.id, e.message);
-        parsedActiveJSON = [];
       }
 
       return {
         id: row.id,
         projectID: row.projectID,
-          userID: row.userID,
+        userID: row.userID,
         taskID: row.taskID,
         screenshotTimeStamp: row.screenshotTimeStamp,
         activeJSON: parsedActiveJSON,
@@ -161,88 +154,7 @@ app.get('/getProjectsV6', async (req, res) => {
   }
 });
 
-app.get('/getProjectsV5', async (req, res) => {
-  try {
-    const [rows] = await db.query(`
-      SELECT
-       wd.*,
-        u.name AS userName,
-        p.name AS projectName,
-        t.name AS taskName
-      FROM workDiary wd
-      LEFT JOIN users u ON wd.userID = u.id
-      LEFT JOIN projects p ON wd.projectID = p.id
-      LEFT JOIN tasks t ON wd.taskID = t.id
-      ORDER BY wd.screenshotTimeStamp DESC
-    `);
-
-    res.json(rows);
-  } catch (error) {
-    console.error('Error fetching work diary with names:', error);
-    res.status(500).json({ error: 'Failed to fetch work diary data' });
-  }
-});app.get('/getProjectsV5', async (req, res) => {
-  try {
-    const [rows] = await db.query(`
-      SELECT
-        wd.*,
-        u.name AS userName,
-        p.name AS projectName,
-        t.name AS taskName
-      FROM workDiary wd
-      LEFT JOIN users u ON wd.userID = u.id
-      LEFT JOIN projects p ON wd.projectID = p.id
-      LEFT JOIN tasks t ON wd.taskID = t.id
-       ORDER BY wd.screenshotTimeStamp DESC
-    `);
-
-    const parsedRows = rows.map(row => {
-      let keyboardJSON = {};
-      let mouseJSON = {};
-      let activeJSON = {};
-
-      try {
-        keyboardJSON = row.keyboardJSON ? JSON.parse(row.keyboardJSON) : {};
-      } catch (e) {
-        console.error('Error parsing keyboardJSON:', e.message);
-      }
-
-      try {
-        mouseJSON = row.mouseJSON ? JSON.parse(row.mouseJSON) : {};
-      } catch (e) {
-        console.error('Error parsing mouseJSON:', e.message);
-      }
-
-      try {
-        activeJSON = row.activeJSON ? JSON.parse(row.activeJSON) : {};
-      } catch (e) {
-        console.error('Error parsing activeJSON:', e.message);
-      }
-
-      return {
-          ...row,
-        keyboardJSON,
-        mouseJSON,
-        activeJSON
-      };
-    });
-
-    res.json(parsedRows);
-  } catch (error) {
-    console.error('Error fetching work diary with names:', error);
-    res.status(500).json({ error: 'Failed to fetch work diary data' });
-  }
-});
-
-
-// Fix your GET routes (close the brackets properly)
-app.get('/getProjectsV2', async (req, res) => {
-  try {
-    const [rows] = await db.query('SELECT * FROM projects');
-    res.status(200).json(rows);
-  } catch (error) {
-    console.error('❌ Error fetching projects:', error.message);
-    // Fix your GET routes (close the brackets properly)
+// Supporting routes for fetching data
 app.get('/getProjectsV2', async (req, res) => {
   try {
     const [rows] = await db.query('SELECT * FROM projects');
@@ -255,7 +167,7 @@ app.get('/getProjectsV2', async (req, res) => {
 
 app.get('/getProjectsV3', async (req, res) => {
   try {
-      const [rows] = await db.query('SELECT * FROM tasks');
+    const [rows] = await db.query('SELECT * FROM tasks');
     res.status(200).json(rows);
   } catch (error) {
     console.error('❌ Error fetching tasks:', error.message);
@@ -263,18 +175,7 @@ app.get('/getProjectsV3', async (req, res) => {
   }
 });
 
-app.get('/getProjectsV4', async (req, res) => {
-  try {
-    const [rows] = await db.query('SELECT * FROM workDiary');
-    res.status(200).json(rows);
-  } catch (error) {
-    console.error('❌ Error fetching workDiary:', error.message);
-      res.status(500).json({ error: 'Failed to fetch workDiary', details: error.message });
-  }
-});
 
-// Start the server
 app.listen(port, () => {
   console.log(`✅ Server running on http://0.0.0.0:${port}`);
 });
-                                            
